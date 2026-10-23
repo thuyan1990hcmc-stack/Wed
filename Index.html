@@ -1,0 +1,81 @@
+<script>
+// ---- MOCK DATA LAYER CHO USER DASHBOARD ----
+(function() {
+    if (!localStorage.getItem('user_bots')) {
+        localStorage.setItem('user_bots', JSON.stringify([
+            { author_id: 'bot_001', username: 'zBot Alpha', status: true, is_main_bot: true, prefix: '?', het_han: 'Unlimited', imei: '123456789', session_cookies: { zpw_sek: 'abc123' } },
+            { author_id: 'bot_002', username: 'Data Drifter', status: true, is_main_bot: false, prefix: '!', het_han: '2025-12-31', imei: '987654321', session_cookies: { zpw_sek: 'def456' } }
+        ]));
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = async function(url, options) {
+        const method = options?.method || 'GET';
+        let bots = JSON.parse(localStorage.getItem('user_bots') || '[]');
+        
+        const mockResponse = (data, status = 200) => new Response(JSON.stringify(data), {
+            status, headers: { 'Content-Type': 'application/json' }
+        });
+
+        // Giả lập API lấy dữ liệu
+        if (url.includes('/api/stats')) {
+            const active = bots.filter(b => b.status).length;
+            return mockResponse({ total_bots: bots.length, active_bots: active, inactive_bots: bots.length - active, expired_bots: 0 });
+        }
+        if (url.includes('/api/admin/bots') || url.includes('/api/bots')) {
+            return mockResponse({ bots: bots });
+        }
+
+        // Giả lập tạo bot
+        if (url.includes('/api/bot/create') && method === 'POST') {
+            const body = JSON.parse(options.body);
+            const newBot = {
+                author_id: 'bot_' + Date.now(),
+                username: body.username || 'New Bot',
+                prefix: body.prefix || '?',
+                status: true, is_main_bot: false,
+                het_han: 'Unlimited', imei: body.imei || 'auto',
+                session_cookies: { zpw_sek: body.zpw_sek || '' }
+            };
+            bots.push(newBot);
+            localStorage.setItem('user_bots', JSON.stringify(bots));
+            return mockResponse({ success: true, bot_id: newBot.author_id });
+        }
+
+        // Giả lập xóa / sửa / bật tắt bot
+        const botActionMatch = url.match(/\/api\/(?:admin\/)?bot\/([^\/]+)\/(toggle|delete|update|update-config)/);
+        if (botActionMatch) {
+            const botId = botActionMatch[1];
+            const action = botActionMatch[2];
+            const botIndex = bots.findIndex(b => b.author_id === botId);
+            
+            if (botIndex !== -1) {
+                if (action === 'toggle') {
+                    const body = JSON.parse(options.body);
+                    bots[botIndex].status = body.status;
+                } else if (action === 'delete') {
+                    bots.splice(botIndex, 1);
+                } else if (action === 'update' || action === 'update-config') {
+                    const body = JSON.parse(options.body);
+                    if (body.username) bots[botIndex].username = body.username;
+                    if (body.prefix) bots[botIndex].prefix = body.prefix;
+                    if (body.imei) bots[botIndex].imei = body.imei;
+                    if (body.session_cookies?.zpw_sek) bots[botIndex].session_cookies.zpw_sek = body.session_cookies.zpw_sek;
+                }
+                localStorage.setItem('user_bots', JSON.stringify(bots));
+                return mockResponse({ success: true });
+            }
+            return mockResponse({ success: false, message: 'Bot not found' }, 404);
+        }
+
+        // Giả lập QR (trả về ảnh QR giả hoặc lỗi để test UI)
+        if (url.includes('/api/qr/generate')) {
+            return mockResponse({ success: false, message: 'QR code không khả dụng trên GitHub Pages' });
+        }
+
+        console.warn('[MOCK] Unhandled API call:', url);
+        return mockResponse({ success: false, message: 'Mock not implemented' }, 404);
+    };
+    console.log('🔥 [USER DASHBOARD] Mock API Layer Activated.');
+})();
+      </script>
